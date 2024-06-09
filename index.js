@@ -1,23 +1,24 @@
 const express = require("express")
 const cors = require("cors")
-const { MongoClient, ServerApiVersion } = require("mongodb")
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb")
 
 require("dotenv").config()
 
 const app = express()
 const port = process.env.PORT || 5000
 
+const corsOptions = {
+  origin: [
+    "http://localhost:5173",
+    "https://taj-apart.web.app",
+    "https://taj-apart.firebaseapp.com",
+  ],
+  credentials: true,
+  optionSuccessStatus: 200,
+}
+
+app.use(cors(corsOptions))
 app.use(express.json())
-app.use(
-  cors({
-    origin: [
-      "http://localhost:5173",
-      "https://taj-apart.web.app",
-      "https://taj-apart.firebaseapp.com",
-    ],
-    credentials: true,
-  })
-)
 
 app.get("/", (req, res) => {
   res.send("Welcome to Taj Apart")
@@ -37,6 +38,9 @@ async function run() {
     const apartmentCollection = client.db("tajApart").collection("apartments")
     const userCollection = client.db("tajApart").collection("users")
     const agreementCollection = client.db("tajApart").collection("agreements")
+    const announcementCollection = client
+      .db("tajApart")
+      .collection("announcements")
 
     // Apartments
     app.get("/apartments", async (req, res) => {
@@ -70,6 +74,7 @@ async function run() {
       res.send(users)
     })
 
+    // User get by email
     app.get("/users/:email", async (req, res) => {
       const email = req.params.email
       const query = { email }
@@ -77,19 +82,26 @@ async function run() {
       res.send(result)
     })
 
+    // User save and update in db
     app.put("/users", async (req, res) => {
       const user = req.body
 
-      const query = { email: user?.email }
+      const query = { email: user.email }
+      // exist user
       const existingUser = await userCollection.findOne(query)
       if (existingUser) {
         if (user.role === "member") {
           const result = await userCollection.updateOne(query, {
-            $set: { role: user?.role },
+            $set: { role: user.role },
           })
           return res.send(result)
         }
-      } else {
+        if (user.role === "user") {
+          const result = await userCollection.updateOne(query, {
+            $set: { role: user?.role },
+          })
+          res.send(result)
+        }
         return res.send(existingUser)
       }
 
@@ -139,6 +151,18 @@ async function run() {
         option
       )
       res.send(postAgreement)
+    })
+
+    // Announcements
+    app.get("/announcements", async (req, res) => {
+      const result = await announcementCollection.find().toArray()
+      res.send(result)
+    })
+
+    app.post("/announcements", async (req, res) => {
+      const announcement = req.body
+      const result = await announcementCollection.insertOne(announcement)
+      res.send(result)
     })
 
     // Send a ping to confirm a successful connection
