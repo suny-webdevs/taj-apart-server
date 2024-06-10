@@ -38,6 +38,7 @@ async function run() {
     const apartmentCollection = client.db("tajApart").collection("apartments")
     const userCollection = client.db("tajApart").collection("users")
     const agreementCollection = client.db("tajApart").collection("agreements")
+    const couponCollection = client.db("tajApart").collection("coupons")
     const announcementCollection = client
       .db("tajApart")
       .collection("announcements")
@@ -124,18 +125,25 @@ async function run() {
 
     app.put("/agreements", async (req, res) => {
       const agreement = req.body
-
+      console.log(agreement)
       const query = {
-        apartment_no: agreement.apartment_no,
+        "agreement.user.email": "agreement.user.email",
       }
 
       const currentUser = await userCollection.findOne({
-        email: agreement?.user.email,
+        email: agreement?.user?.email,
       })
       if (currentUser) {
         const existingAgreement = await agreementCollection.findOne(query)
-        if (existingAgreement) return res.send(existingAgreement)
-      } else {
+        if (existingAgreement) {
+          if (agreement.status === "checked") {
+            const result = await agreementCollection.updateOne(query, {
+              $set: { status: agreement.status },
+            })
+            res.send(result)
+          }
+          return res.send(existingAgreement)
+        }
       }
 
       const option = { upsert: true }
@@ -153,6 +161,13 @@ async function run() {
       res.send(postAgreement)
     })
 
+    app.delete("/agreements/:id", async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await agreementCollection.deleteOne(query)
+      res.send(result)
+    })
+
     // Announcements
     app.get("/announcements", async (req, res) => {
       const result = await announcementCollection.find().toArray()
@@ -162,6 +177,25 @@ async function run() {
     app.post("/announcements", async (req, res) => {
       const announcement = req.body
       const result = await announcementCollection.insertOne(announcement)
+      res.send(result)
+    })
+
+    // Coupons
+    app.get("/coupons", async (req, res) => {
+      const result = await couponCollection.find().toArray()
+      res.send(result)
+    })
+
+    app.post("/coupons", async (req, res) => {
+      const coupon = req.body
+      const result = await couponCollection.insertOne(coupon)
+      res.send(result)
+    })
+
+    app.delete("/coupons/:id", async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await couponCollection.deleteOne(query)
       res.send(result)
     })
 
