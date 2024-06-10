@@ -101,7 +101,7 @@ async function run() {
           const result = await userCollection.updateOne(query, {
             $set: { role: user?.role },
           })
-          res.send(result)
+          return res.send(result)
         }
         return res.send(existingUser)
       }
@@ -127,11 +127,11 @@ async function run() {
       const agreement = req.body
       console.log(agreement)
       const query = {
-        "agreement.user.email": "agreement.user.email",
+        user_email: user_email,
       }
 
       const currentUser = await userCollection.findOne({
-        email: agreement?.user?.email,
+        email: agreement?.user_email,
       })
       if (currentUser) {
         const existingAgreement = await agreementCollection.findOne(query)
