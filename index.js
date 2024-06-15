@@ -10,6 +10,7 @@ const port = process.env.PORT || 5000
 const corsOptions = {
   origin: [
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://taj-apart.web.app",
     "https://taj-apart.firebaseapp.com",
   ],
@@ -77,18 +78,9 @@ async function run() {
 
     // User get by email
     app.get("/users/:email", async (req, res) => {
-      const email = req.params.email
-      const query = { email }
-      const result = await userCollection.findOne(query)
-      res.send(result)
-    })
-
-    // User save and update in db
-    app.put("/users", async (req, res) => {
       const user = req.body
+      const query = { email: req.params.email }
 
-      const query = { email: user.email }
-      // exist user
       const existingUser = await userCollection.findOne(query)
       if (existingUser) {
         if (user.role === "member") {
@@ -104,6 +96,49 @@ async function run() {
           return res.send(result)
         }
         return res.send(existingUser)
+      }
+
+      const result = await userCollection.findOne(query)
+      res.send(result)
+    })
+
+    // User save and update in db
+    app.put("/users", async (req, res) => {
+      const user = req.body
+
+      const query = { email: user.email }
+      const options = { upsert: true }
+      const updateDoc = {
+        $set: {
+          ...user,
+        },
+      }
+
+      const postUser = await userCollection.updateOne(query, updateDoc, options)
+      res.send(postUser)
+    })
+
+    app.put("/users/:email", async (req, res) => {
+      const userInfo = req.body
+      console.log(userInfo)
+      const query = { email: req.params.email }
+      const isUser = await userCollection.findOne(query)
+      if (isUser) {
+        if (userInfo.role === "member") {
+          const result = await userCollection.updateOne(query, {
+            $set: { role: userInfo.role },
+          })
+          return res.send(result)
+        }
+
+        if (userInfo.role === "user") {
+          const result = await userCollection.updateOne(query, {
+            $set: { role: userInfo.role },
+          })
+          return res.send(result)
+        }
+      } else {
+        res.send(isUser)
       }
 
       const options = { upsert: true }
@@ -123,11 +158,19 @@ async function run() {
       res.send(agreements)
     })
 
+    app.get("/agreements/:email", async (req, res) => {
+      const query = { user_email: req.params.email }
+      const result = await agreementCollection.findOne(query)
+      res.send(result)
+    })
+
     app.put("/agreements", async (req, res) => {
       const agreement = req.body
+
       console.log(agreement)
+
       const query = {
-        user_email: user_email,
+        apartment_no: agreement.apartment_no,
       }
 
       const currentUser = await userCollection.findOne({
@@ -137,10 +180,17 @@ async function run() {
         const existingAgreement = await agreementCollection.findOne(query)
         if (existingAgreement) {
           if (agreement.status === "checked") {
-            const result = await agreementCollection.updateOne(query, {
-              $set: { status: agreement.status },
-            })
-            res.send(result)
+            const result = await agreementCollection.updateOne(
+              query,
+              {
+                $set: {
+                  status: agreement.status,
+                  accept_date: agreement.accept_date,
+                },
+              },
+              { upsert: true }
+            )
+            return res.send(result)
           }
           return res.send(existingAgreement)
         }
