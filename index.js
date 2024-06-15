@@ -107,6 +107,8 @@ async function run() {
       const user = req.body
 
       const query = { email: user.email }
+      const isExist = await userCollection.findOne(query)
+      if (isExist) return res.send(isExist)
       const options = { upsert: true }
       const updateDoc = {
         $set: {
