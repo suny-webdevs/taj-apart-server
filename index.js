@@ -43,6 +43,7 @@ async function run() {
     const announcementCollection = client
       .db("tajApart")
       .collection("announcements")
+    const paymentCollection = client.db("tajApart").collection("payments")
 
     // Apartments
     app.get("/apartments", async (req, res) => {
@@ -122,7 +123,7 @@ async function run() {
 
     app.put("/users/:email", async (req, res) => {
       const userInfo = req.body
-      console.log(userInfo)
+
       const query = { email: req.params.email }
       const isUser = await userCollection.findOne(query)
       if (isUser) {
@@ -140,13 +141,13 @@ async function run() {
           return res.send(result)
         }
       } else {
-        res.send(isUser)
+        return res.send(isUser)
       }
 
       const options = { upsert: true }
       const updateDoc = {
         $set: {
-          ...user,
+          ...userInfo,
         },
       }
 
@@ -168,8 +169,6 @@ async function run() {
 
     app.put("/agreements", async (req, res) => {
       const agreement = req.body
-
-      console.log(agreement)
 
       const query = {
         apartment_no: agreement.apartment_no,
@@ -244,11 +243,56 @@ async function run() {
       res.send(result)
     })
 
+    app.post("/verify-coupon", async (req, res) => {
+      const { code } = req.body
+      try {
+        const coupon = await couponCollection.findOne({ code })
+        if (coupon) {
+          return res.send({ success: true, discount: coupon.discount })
+        } else {
+          return res.send({ success: false, message: "Invalid coupon" })
+        }
+      } catch (error) {
+        res.status(500).send({ success: false, message: "Server error" })
+      }
+    })
+
     app.delete("/coupons/:id", async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await couponCollection.deleteOne(query)
       res.send(result)
+    })
+
+    // Payments
+    app.get("/payments", async (req, res) => {
+      const result = await paymentCollection.find().toArray()
+      res.send(result)
+    })
+
+    app.get("/payments/:email", async (req, res) => {
+      const query = { user_email: req.params.email }
+      const result = await paymentCollection.find(query).toArray()
+      res.send(result)
+    })
+
+    app.post("/payments", async (req, res) => {
+      const paymentInfo = req.body
+
+      const isUser = await userCollection.findOne({
+        email: paymentInfo.user_email,
+      })
+      if (isUser) {
+        const isExist = await paymentCollection.findOne({
+          month: paymentInfo.month,
+        })
+        if (isExist) {
+          return res.send({ isExist: true })
+        }
+      }
+
+      const savePayment = await paymentCollection.insertOne(paymentInfo)
+      res.send(savePayment)
     })
 
     // Send a ping to confirm a successful connection
