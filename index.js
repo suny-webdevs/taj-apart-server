@@ -248,12 +248,12 @@ async function run() {
       try {
         const coupon = await couponCollection.findOne({ code })
         if (coupon) {
-          return res.send({ success: true, discount: coupon.discount })
+          return res.send({ valid: true, discount: coupon.discount })
         } else {
-          return res.send({ success: false, message: "Invalid coupon" })
+          return res.send({ valid: false, message: "Invalid coupon" })
         }
       } catch (error) {
-        res.status(500).send({ success: false, message: "Server error" })
+        res.status(500).send({ valid: false, message: "Server error" })
       }
     })
 
