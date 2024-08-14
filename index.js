@@ -4,6 +4,8 @@ const cors = require("cors")
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb")
 const axios = require("axios")
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
+const jwt = require("jsonwebtoken")
+const cookieParser = require("cookie-parser")
 
 const app = express()
 const port = process.env.PORT || 5000
@@ -22,11 +24,29 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded())
+app.use(cookieParser())
 
 app.get("/", (req, res) => {
   res.send("Welcome to Taj Apart")
 })
-// const uri = "mongodb://localhost:27017/"
+
+// Verify token middleware
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies?.token
+  console.log(token)
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access!" })
+  }
+  jwt.verify(token, process.env.ACCESS_SECRET_TOKEN, (err, decoded) => {
+    if (err) {
+      console.log(err)
+      res.status(401).send({ message: "Unauthorized access!" })
+    }
+    req.user = decoded
+    next()
+  })
+}
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.y3rtmj6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -47,6 +67,56 @@ async function run() {
       .db("tajApart")
       .collection("announcements")
     const paymentCollection = client.db("tajApart").collection("payments")
+
+    // * Middlewares *
+    // verify admin middleware
+    const verifyAdmin = async (req, res, next) => {
+      const query = { email: req.user?.email }
+      const result = await userCollection.findOne(query)
+      if (!result || result?.role !== "admin") {
+        return res.status(401).send({ message: "Unauthorized access!" })
+      }
+      next()
+    }
+
+    // verify member
+    const verifyMember = async (req, res, next) => {
+      const query = { email: req.user?.email }
+      const result = await userCollection.findOne(query)
+      if (!result || result?.role !== "member") {
+        return res.status(401).send({ message: "Unauthorized access!" })
+      }
+      next()
+    }
+
+    // jwt api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body
+      const token = jwt.sign(user, process.env.ACCESS_SECRET_TOKEN, {
+        expiresIn: "12h",
+      })
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true })
+    })
+    // logout api
+    app.get("/logout", async (req, res) => {
+      try {
+        res
+          .clearCookie("token", {
+            maxAge: 0,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          })
+          .send({ success: true })
+      } catch (err) {
+        res.status(500).send(err)
+      }
+    })
 
     // Apartments
     app.get("/apartments", async (req, res) => {
@@ -75,7 +145,7 @@ async function run() {
     })
 
     // Users
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray()
       res.send(users)
     })
@@ -159,7 +229,7 @@ async function run() {
     })
 
     // Agreements
-    app.get("/agreements", async (req, res) => {
+    app.get("/agreements", verifyToken, verifyAdmin, async (req, res) => {
       const agreements = await agreementCollection.find().toArray()
       res.send(agreements)
     })
@@ -170,7 +240,7 @@ async function run() {
       res.send(result)
     })
 
-    app.put("/agreements", async (req, res) => {
+    app.put("/agreements", verifyToken, async (req, res) => {
       const agreement = req.body
 
       const query = {
@@ -215,12 +285,17 @@ async function run() {
       res.send(postAgreement)
     })
 
-    app.delete("/agreements/:id", async (req, res) => {
-      const id = req.params.id
-      const query = { _id: new ObjectId(id) }
-      const result = await agreementCollection.deleteOne(query)
-      res.send(result)
-    })
+    app.delete(
+      "/agreements/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id
+        const query = { _id: new ObjectId(id) }
+        const result = await agreementCollection.deleteOne(query)
+        res.send(result)
+      }
+    )
 
     // Announcements
     app.get("/announcements", async (req, res) => {
@@ -235,12 +310,12 @@ async function run() {
     })
 
     // Coupons
-    app.get("/coupons", async (req, res) => {
+    app.get("/coupons", verifyToken, async (req, res) => {
       const result = await couponCollection.find().toArray()
       res.send(result)
     })
 
-    app.post("/coupons", async (req, res) => {
+    app.post("/coupons", verifyToken, verifyAdmin, async (req, res) => {
       const coupon = req.body
       const result = await couponCollection.insertOne(coupon)
       res.send(result)
@@ -260,7 +335,7 @@ async function run() {
       }
     })
 
-    app.delete("/coupons/:id", async (req, res) => {
+    app.delete("/coupons/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await couponCollection.deleteOne(query)
@@ -268,18 +343,18 @@ async function run() {
     })
 
     // Payments
-    app.get("/payments", async (req, res) => {
+    app.get("/payments", verifyToken, verifyAdmin, async (req, res) => {
       const result = await paymentCollection.find().toArray()
       res.send(result)
     })
 
-    app.get("/payments/:email", async (req, res) => {
+    app.get("/payments/:email", verifyToken, async (req, res) => {
       const query = { user_email: req.params.email }
       const result = await paymentCollection.find(query).toArray()
       res.send(result)
     })
 
-    app.post("/payments", async (req, res) => {
+    app.post("/payments", verifyToken, async (req, res) => {
       const paymentInfo = req.body
 
       const isUser = await userCollection.findOne({
@@ -299,7 +374,7 @@ async function run() {
     })
 
     // Payment intent
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { total_amount } = req.body
       const amount = parseInt(total_amount * 100)
       const paymentIntent = await stripe.paymentIntents.create({
