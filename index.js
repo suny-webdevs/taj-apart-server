@@ -309,7 +309,7 @@ async function run() {
     })
 
     // Coupons
-    app.get("/coupons", verifyToken, async (req, res) => {
+    app.get("/coupons", async (req, res) => {
       const result = await couponCollection.find().toArray()
       res.send(result)
     })
@@ -342,7 +342,7 @@ async function run() {
     })
 
     // Payments
-    app.get("/payments", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/payments", verifyToken, async (req, res) => {
       const result = await paymentCollection.find().toArray()
       res.send(result)
     })
