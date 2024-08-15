@@ -33,7 +33,6 @@ app.get("/", (req, res) => {
 // Verify token middleware
 const verifyToken = async (req, res, next) => {
   const token = req.cookies?.token
-  console.log(token)
   if (!token) {
     return res.status(401).send({ message: "Unauthorized access!" })
   }
@@ -145,7 +144,7 @@ async function run() {
     })
 
     // Users
-    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/users", async (req, res) => {
       const users = await userCollection.find().toArray()
       res.send(users)
     })
@@ -229,7 +228,7 @@ async function run() {
     })
 
     // Agreements
-    app.get("/agreements", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/agreements", async (req, res) => {
       const agreements = await agreementCollection.find().toArray()
       res.send(agreements)
     })
